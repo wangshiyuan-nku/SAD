@@ -1,0 +1,137 @@
+!Set up aperture
+ChangeInitalPoint[]:=Module[{bl,p},
+  bl=ExtractBeamLine[BeamLineName[]];
+  p=LINE["POSITION","INJ"];
+  bl$inj=Join[Take[bl,{p,-1}],Take[bl,{1,p-1}]];
+
+  FFS["USE bl$inj"];
+  FFS["CELL"];
+  FFS["CALC"];
+];
+
+SetApert[]:=Module[{ap},
+  bl=ExtractBeamLine[BeamLineName[]];
+  ap=Select[LINE["POSITION"],(LINE["L",#]>0)&];
+  ap=Reverse[ap];
+
+  SetElement["AP","APERT"];
+  Do[
+   bl=(Join[Take[bl,{1,ap[[i]]-1}],BeamLine[AP],Take[bl,{ap[i]}],Take[bl,{ap[[i]]+1,-1}]]);
+  ,{i,1,Length[ap]}];
+  AppendTo[bl,BeamLine[AP]];
+
+  FFS["USE bl"];
+  FFS["CELL"];
+  FFS["CALC"];
+  ap
+];
+
+SetApertSize[]:=Module[{},
+  APposi=LINE["POSITION","AP.*"];
+  APS=LINE["S","AP.*"];
+  Ltotal=LINE["S","$$$"];
+  If[LINE["S","IP"]==0, 
+    APDisIP=If[#>Ltotal-#,#-Ltotal,#]&/@APS,
+    APDisIP=(#-LINE["S","IP"])&/@APS
+  ];  
+  rx=0;ry=0;
+   
+  Do[
+    rx=0;ry=0;
+    AbsDis=Abs[APDisIP[[i]]];
+    If[AbsDis<0.715, rx=0.0315; ry=0.0315;];
+    If[AbsDis>=0.715&&AbsDis<1.2, rx=0.0315+(AbsDis-0.715)*0.0484536; ry=0.0315+(AbsDis-0.715)*0.0484536];
+    If[AbsDis>=1.2 && AbsDis<1.89, rx=0.055; ry=0.055];
+    If[AbsDis>=1.89&&AbsDis<1.924, rx=0.055+(AbsDis-1.89)*0.1470588; ry=0.055+(AbsDis-1.89)*0.1470588];
+    If[AbsDis>=1.924&&AbsDis<2.129, rx=0.06+(AbsDis-1.924)*0.1578947; ry=0.06+(AbsDis-1.924)*0.1578947];
+    If[AbsDis>=2.129 && AbsDis<2.210, rx=0.032; ry=0.032];
+
+    If[APDisIP[[i]]>0, 
+      !downstream
+      If[AbsDis>=2.21&&AbsDis<3.058, rx=0.032+(AbsDis-2.21)*0.0159198; ry=0.032+(AbsDis-2.21)*0.0159198];
+      If[AbsDis>=3.058&&AbsDis<3.12, rx=0.0455+(AbsDis-3.058)*0.0532258; ry=0.0455+(AbsDis-3.058)*0.0532258];
+      If[AbsDis>=3.12&&AbsDis<3.55, rx=0.0422+(AbsDis-3.12)*0.0181395; ry=0.0422+(AbsDis-3.12)*0.0181395];
+      If[AbsDis>=3.55 && AbsDis<12.0, rx=0.05; ry=0.05],
+      !upstream
+      If[AbsDis>=2.21&&AbsDis<3.058, rx=0.032+(AbsDis-2.21)*0.01533019; ry=0.032+(AbsDis-2.21)*0.01533019];
+      If[AbsDis>=3.058&&AbsDis<3.12, rx=0.045+(AbsDis-3.058)*0.08064516; ry=0.045+(AbsDis-3.058)*0.08064516];
+      If[AbsDis>=3.12 && AbsDis<12.0, rx=0.05; ry=0.05];
+    ];
+   
+    If[AbsDis>=12.0, rx=0.055; ry=0.028];
+
+    !collimators
+    Lcol=0.335;  Lcolcen=0.125; Kxytrans=0.1777143;
+    Zcol=-7.6; Rmincol=0.028; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCV02
+    If[DisfromCol<=Lcol/2, ry=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];    
+    Zcol=-8.2; Rmincol=0.035; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCH02
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+
+    !------z=+-11m not used for positron ring-------
+    Zcol=-11; Rmincol=0.035; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCH04
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=11; Rmincol=0.035; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R3ICH04
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    !---------------------------------------
+
+    !collimators >12m from IP
+    Zcol=-27; Rmincol=0.031; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCH08
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=-46.8; Rmincol=0.026; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCH14
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=27.5; Rmincol=0.03; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R3ICH08
+    If[DisfromCol<=Lcol/2, rx=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=-50.1; Rmincol=0.015; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCV15
+    If[DisfromCol<=Lcol/2, ry=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=172.73; Rmincol=0.014; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R4OCV16
+    If[DisfromCol<=Lcol/2, ry=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    Zcol=28.5; Rmincol=0.015; DisfromCol=Abs[APDisIP[[i]]-Zcol]; !R3ICV09
+    If[DisfromCol<=Lcol/2, ry=If[DisfromCol<=Lcolcen/2, Rmincol, Kxytrans*(DisfromCol-Lcolcen/2)+Rmincol]; ];
+    If[rx<0.001||ry<0.001,Print["apt not set at z=",APDisIP[[i]] ];
+    ];
+
+    !dx settings
+    If[AbsDis<0.909, dx=AbsDis*0.011];
+    If[AbsDis>=0.909 && AbsDis<2.129, dx=(AbsDis-0.909)*0.01854+0.01];
+    If[AbsDis>=2.129, dx=0];
+
+!    Print["rx:"//rx//"; ry:"//ry//"; dx:"//dx];
+    LINE["AX",APposi[[i]]]=rx;
+    LINE["AY",APposi[[i]]]=ry;
+    LINE["DX",APposi[[i]]]=dx;    
+  ,{i,1,Length[APposi]}]; 
+
+  APposi
+];
+
+PrintApert[APposi_]:=Module[{lscat,APName,APS,APAX,APAY,APDX,APBetaX,APBetaY,APEX,APEY,APEPX,APEPY,APTYPE},
+  fileApertName="ApertSet.txt";
+  fileApert=OpenWrite[fileApertName];    
+  Print["Write apert file"];
+
+  APName=LINE["Name",APposi];
+  APS=LINE["S",APposi];
+  APAX=LINE["AX",APposi];
+  APAY=LINE["AY",APposi];
+  APDX=LINE["DX",APposi];
+
+  APBetaX=Twiss["BX",APposi];
+  APBetaY=Twiss["BY",APposi];
+!  APAX=Twiss["AX",APposi];
+!  APAY=Twiss["AY",APposi];
+  APEX=Twiss["EX",APposi];
+  APEY=Twiss["EY",APposi];
+  APEPX=Twiss["EPX",APposi];
+  APEPY=Twiss["EPY",APposi];
+
+  APTYPE=LINE["TYPENAME",APposi];  
+  lscat=LINE["S",Drop[APposi,1]]-LINE["S",Drop[APposi,-1]];
+  lscat=AppendTo[lscat,LINE["S","$$$"]-LINE["S",APposi[[-1]]]+LINE["S",APposi[[1]]]];
+
+  !Write[fileApert,"Name	posi	type	S	AX	AY	DX	beta"]; 
+  Do[
+   ! Write[fileApert,APName[[i]],"	",APposi[[i]],"	",APTYPE[[i]],"	",APS[[i]],"	",APAX[[i]],"	",APAY[[i]],"	",APDX[[i]],"	",APBeta[[i]]];
+     Write[fileApert,APName[[i]]," ",APposi[[i]]," ",APS[[i]],"    ",lscat[[i]],"     ",APBetaX[[i]],"        ",APBetaY[[i]],"        ",APAX[[i]],"   ",APAY[[i]] ];
+  ,{i,1,Length[APposi]}];
+  Close[fileApert];
+];

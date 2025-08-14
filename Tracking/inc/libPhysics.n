@@ -1,0 +1,231 @@
+!Generate single beam background
+TouscScat[beam_,npar_,emitxfile_:Null,emityfile_:Null,Lbunchfile_:Null,sigEfile_:Null,dxmin_:Null,dxmax_:Null]:=Module[{
+  a=1.0,eps=1e-6,
+  alphax,betax,etax,etapx,alphay,betay,etay,etapy,gammax,gammay,
+  sigz,sigd,betaz,dd1,dd2,X1,PX1,PX2,x1,px1,px2,
+  sigx,sigy,sigpx,Hx,q,qn,theta,sigma,fac=0.5
+  },
+
+  p=beam[[1]];
+  {alphax,betax,etax,etapx}=Twiss[{"AX","BX","EX","EPX"},p];
+  {alphay,betay,etay,etapy}=Twiss[{"AY","BY","EY","EPY"},p];
+  gammax=(1+alphax^2)/betax;
+
+!  {emitx,emity,emitz}=Emittances/.emit;
+!  If[emitxfile<=>Null,
+!    emitx=emitxfile;
+!    emity=emityfile;
+!    sigd=sigEfile;
+!    sigz=Lbunchfile;
+!    ,
+!    sigd=MomentumSpread/.emit; 
+!    sigz=BunchLength/.emit;
+!    ];
+  sigd=sigE;
+  sigz=Lbunch;
+
+  betaz=sigz/sigd;
+  !Print["emitx:"//emitx//"; emity:"//emity//"; sigd:"//sigd//"; sigz:"//sigz]; 
+
+  dd1=2*a*sigd*(Random[npar]-0.5);
+  dd2=2*a*sigd*(Random[npar]-0.5);
+
+  X1=2*a*Sqrt[emitx]*(Random[npar]-0.5);
+  PX1=-2*a*Sqrt[emitx]*(Random[npar]-0.5);
+  PX2=-2*a*Sqrt[emitx]*(Random[npar]-0.5);
+
+  x1=Sqrt[betax]*X1+etax*dd1;
+  px1=(PX1-alphax*X1)/Sqrt[betax]+etapx*dd1;
+  X2=(x1-dd2*etax)/Sqrt[betax];
+  px2=(PX2-alphax*X2)/Sqrt[betax]+etapx*dd2;
+
+  sigx=Sqrt[emitx*betax+(etax*sigd)^2];
+  Hx=gammax*etax^2+2*alphax*etax*etapx+betax*etapx^2;
+  sigpx=Sqrt[emitx/betax]*Sqrt[1+Hx*sigd^2/emitx];
+  sigy=Sqrt[emity*betay+(etay*sigd)^2];
+
+  q=0.5*(px2-px1);
+  qn=Abs[q];
+
+  eps=1e-6;
+  theta=(Pi/2-eps)*Random[npar]+eps;
+
+  gamma=LINE["GAMMA","$$$"];
+  re=2.82e-15;
+  sigma=Pi*re^2/2/(gamma*qn)^4*(2/Cos[theta]^3-1/Cos[theta])*Sin[theta]*(Pi/2-eps);
+
+!  rate=(PBUNCH*SpeedOfLight)/(2*Pi^2*gamma*sigpx*sigx*sigy*sigz)*sigma*qn*Exp[-(qn/sigpx)^2]*(a*sigpx)/npar;
+
+(* 1/tau = Sum_i (c*PBUNCH*w_i*L_i)/circ *)
+
+  w=fac/(2*Pi^2*gamma*sigpx*sigx*sigy*sigz)*sigma*qn*Exp[-(qn/sigpx)^2]*(a*sigpx)/npar;
+
+  sign=If[#>0.5,1,-1]&/@Random[npar];
+  de=gamma*qn*Cos[theta]*sign;
+  !Print["w:"//w//"; de:"//de//"qn:"//qn];  
+
+  !if |de|>0.95 delete this event
+  tmp=If[#[[1]]<-0.95||#[[1]]>0.95,{0,0},#]&/@Thread[{de,w}];
+  de=tmp[[,1]];
+  w=tmp[[,2]];
+
+  !xx=Table[0,{npar}]+Twiss["DX",p];
+  !px=Table[0,{npar}]+Twiss["DPX",p];
+  !yy=Table[0,{npar}]+Twiss["DY",p];
+  !py=Table[0,{npar}]+Twiss["DPY",p];
+  !zz=Table[0,{npar}];
+
+  xx=beam[[2,1]];
+  !px=Table[0,{npar}]+Twiss["DPX",p];
+  px=beam[[2,2]];
+  yy=beam[[2,3]];
+  !py=Table[0,{npar}]+Twiss["DPY",p];
+  py=beam[[2,4]];
+  zz=beam[[2,5]];
+
+  {w,de,{beam[[1]],{xx,px,yy,py,zz,de,beam[[2,7]]}}}  
+];
+
+TouscScatSAD[beam_]:=Module[{p,ll,xx,px,yy,py,zz,tb,ee,ptot,spl,e1,e2,delta},
+(* 1/tau = Sum_i (c*PBUNCH*w_i*L_i)/circ *)
+
+  p=beam[[1]];
+  ll=LINE["L",p];
+  If[ll==0,ll=1];
+
+!  xx=Table[0,{npar}];
+!  px=Table[0,{npar}];
+!  yy=Table[0,{npar}];
+!  py=Table[0,{npar}];
+!  zz=Table[0,{npar}];
+
+  xx=beam[[2,1]];
+  px=beam[[2,2]];
+  yy=beam[[2,3]];
+  py=beam[[2,4]];
+  zz=beam[[2,5]];  
+
+  tb=TouschekTable;
+
+  ee=tb[[2,1]];
+  ptot=tb[[4,p]];
+
+  spl=Spline[Thread[{ee,ptot}]];
+
+  e1=Min[ee];
+  e2=Max[ee];
+  delta=(e2-e1)/(npar/2);
+  de=Join[-Reverse[Range[npar/2]*delta+e1],Range[npar/2]*delta+e1];
+
+  de=If[Abs[#]<e1,e1,#]&/@de;
+  w=-(Derivative[1][spl][Abs[#]]&/@de)*delta*circum/ll;
+  w=w/SpeedOfLight/PBUNCH;
+  {w,de,{beam[[1]],{xx,px,yy,py,zz,de,beam[[2,7]]}}}    
+];
+
+TouscScatdE[beam_,dxmin_:Null,dxmax_:Null]:=Module[{
+  re,p,alphax,betax,etax,etapx,alphay,betay,etay,etapy,
+  sigd,sigz,sigx,sigy,gamma,gammax,Hx,sigpx,delta,epsilon,
+  IntNum,IntVal,Dfunc
+  },
+  re=2.818e-15;
+  p=beam[[1]];
+  
+  {alphax,betax,etax,etapx}=Twiss[{"AX","BX","EX","EPX"},p];
+  {alphay,betay,etay,etapy}=Twiss[{"AY","BY","EY","EPY"},p];
+!  {emitx,emity,emitz}=Emittances/.emit; !set in Para file
+!  Print["emitx:",emitx,"; emity:",emity];
+  sigd=sigE;
+  sigz=Lbunch;
+!  sigd=MomentumSpread/.emit;
+!  sigz=BunchLength/.emit;
+
+  sigx=Sqrt[emitx*betax+(etax*sigd)^2];
+  sigy=Sqrt[emity*betay+(etay*sigd)^2];
+  gamma=LINE["GAMMA","$$$"];
+
+  gammax=(1+alphax^2)/betax;
+  Hx=gammax*etax^2+2*alphax*etax*etapx+betax*etapx^2;
+  sigpx=Sqrt[emitx/betax]*Sqrt[1+Hx*sigd^2/emitx];
+!Print["sigx:",sigx,"; sigy:",sigy,"; sigd:",sigd,"; sigz:",sigz,"; sigpx:",sigpx];
+
+  de=dxmin+(dxmax-dxmin)*Range[npar]/npar;
+  delta=(dxmax-dxmin)/npar;
+  epsilon=(de/gamma/sigpx)^2;
+  
+  !cal D function
+  IntNum=1000;
+  IntVal=Table[0,{npar}];
+  Do[
+    Intmin=0; Intmax=1; du1=(Intmax-Intmin)/IntNum;
+    IntPar=u1*(Intmax-Intmin)/IntNum+Intmin;
+    IntVal=IntVal+du1*(2.0/IntPar+Log[IntPar]-2)*Exp[-epsilon/IntPar];
+  ,{u1,1,IntNum}];
+!  Dfunc=Sqrt[epsilon]/2*Integrate[(2/du+Log[du]-2)*Exp[-epsilon/du],{du,0,1}];
+  Dfunc=Sqrt[epsilon]/2*IntVal;
+
+  !cal D1 func
+  IntVal2=Table[0,{npar}];
+  IntVal3=Table[0,{npar}];
+  Do[
+    IntVal2[[n1]]=NIntegrate[Log[x]/x*Exp[-1*x],{x,epsilon[[n1]],1}]; ! set max boundary at 1, brings ~0.1 err
+    IntVal3[[n1]]=NIntegrate[Exp[-1*x]/x,{x,epsilon[[n1]],1}]; !set max boundary at 1, brings ~0.22 err
+  ,{n1,1,npar}];
+
+  D1func=Dfunc/2/epsilon+Sqrt[epsilon]*(IntVal2/2+(2-Log[epsilon])/2*IntVal3-Exp[-1*epsilon]/epsilon);
+!  Print["D1func:",D1func];
+
+  w=delta*re^2/(8*Pi*sigx*sigy*sigz*gamma^2)*Abs[(-3/de^4*Dfunc+2/(gamma*sigpx*de^2)*D1func)];
+
+  {w,de,{beam[[1]],{beam[[2,1]],beam[[2,2]],beam[[2,3]],beam[[2,4]],beam[[2,5]],de,beam[[2,7]]}}}
+];
+
+
+XSectionB[u_]:=Module[{alpha=1/137},
+  (* u = dE/E0 *)
+  Z=7;
+  re=2.82e-15;
+  gamma=LINE["GAMMA","$$$"];
+
+! the following first formula only consider the scattering from nuclear , the second formula include both nuclear and Extranuclear electronics
+!  4*alpha*re^2*Z^2*(4/3/u)*((1-u+0.75*u^2)*Log[183/Z^(1/3)]+(1/9)*(1-u))
+  4*alpha*re^2*((4/3/u-4/3+u)*(Z^(2)Log[183/Z^(1/3)]+Z*Log[1194/Z^(2/3)])+Z*(Z+1)/9*(1-u))
+  ];
+
+BremsScat[beam_,dxmin_:Null,dxmax_:Null]:=Module[{delta},
+  npar=Length[beam[[2,7]]];
+  u=dxmin+(dxmax-dxmin)*Range[npar]/npar;
+  delta=(dxmax-dxmin)/npar;
+  w=delta*XSectionB[#]&/@u;
+  de=beam[[2,6]]-u;
+  
+  !if |de|>0.95 delete this event
+  tmp=If[#[[1]]<-0.95||#[[1]]>0.95,{0,0},#]&/@Thread[{de,w}];
+
+  de=tmp[[,1]];
+  w=tmp[[,2]];
+
+  {w,u,{beam[[1]],{beam[[2,1]],beam[[2,2]],beam[[2,3]],beam[[2,4]],beam[[2,5]],de,beam[[2,7]]}}}
+  ];
+
+XSectionC[theta_]:=Module[{},
+  Z=7;
+  re=2.82e-15;
+  gamma=LINE["GAMMA","$$$"];
+  theta0=Z^(1/3)/137/gamma;
+!  (4*re^2*Z^2/gamma^2/(theta^2+theta0^2)^2)
+  (8*Pi*Sin[theta]*re^2*Z^2/gamma^2/(theta^2+theta0^2)^2)
+  ];
+
+CoulombScat[beam_,dxmin_:Null,dxmax_:Null]:=Module[{delta},
+  npar=Length[beam[[2,7]]];
+  !th=dxmin+(dxmax-dxmin)*Random[npar];
+  th=dxmin+(dxmax-dxmin)*Range[npar]/npar; ! use array instead of sampling
+  ph=2*Pi*Random[npar];
+  pxc=beam[[2,2]]+(1+beam[[2,6]])*th*Cos[ph];
+  pyc=beam[[2,4]]+(1+beam[[2,6]])*th*Sin[ph];
+  delta=(dxmax-dxmin)/npar;
+  w=delta*XSectionC[#]&/@th;
+
+  {w,th,{beam[[1]],{beam[[2,1]],pxc,beam[[2,3]],pyc,beam[[2,5]],beam[[2,6]],beam[[2,7]]}}}
+  ];

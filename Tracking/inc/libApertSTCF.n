@@ -1,0 +1,87 @@
+!Set up aperture
+ChangeInitalPoint[]:=Module[{bl,p},
+  bl=ExtractBeamLine[BeamLineName[]];
+  p=LINE["POSITION","INJ"];
+  bl$inj=Join[Take[bl,{p,-1}],Take[bl,{1,p-1}]];
+
+  FFS["USE bl$inj"];
+  FFS["CELL"];
+  FFS["CALC"];
+];
+
+SetApert[]:=Module[{ap},
+  bl=ExtractBeamLine[BeamLineName[]];
+  ap=Select[LINE["POSITION"],(LINE["L",#]>0)&];
+  ap=Reverse[ap];
+
+  SetElement["AP","APERT"];
+  Do[
+   bl=(Join[Take[bl,{1,ap[[i]]-1}],BeamLine[AP],Take[bl,{ap[i]}],Take[bl,{ap[[i]]+1,-1}]]);
+  ,{i,1,Length[ap]}];
+  AppendTo[bl,BeamLine[AP]];
+
+  FFS["USE bl"];
+  FFS["CELL"];
+  FFS["CALC"];
+  ap
+];
+
+SetApertSize[]:=Module[{},
+  APposi=LINE["POSITION","AP.*"];
+  APS=LINE["S","AP.*"];
+  Ltotal=LINE["S","$$$"];
+  If[LINE["S","IP"]==0, 
+    APDisIP=Min[#,Ltotal-#]&/@APS,
+    APDisIP=Abs[#-LINE["S","IP"]]&/@APS
+  ];  
+
+  Do[
+    If[APDisIP[[i]]<0.5, rx=0.03; ry=rx;];
+    If[APDisIP[[i]]>=0.5 && APDisIP[[i]]<1.25, rx=0.014; ry=rx];
+    If[APDisIP[[i]]>=1.25 && APDisIP[[i]]<1.35, rx=0.014+(APDisIP[[i]]-1.25)*0.08; ry=rx];
+    If[APDisIP[[i]]>=1.35 && APDisIP[[i]]<1.8, rx=0.022; ry=rx];
+    If[APDisIP[[i]]>=1.8 && APDisIP[[i]]<2.0, rx=0.022+(APDisIP[[i]]-1.8)*0.065; ry=rx];
+    If[APDisIP[[i]]>2.0 && APDisIP[[i]]<15.0, rx=0.035; ry=rx];
+    If[APDisIP[[i]]>15.0, rx=0.055; ry=0.03;];
+
+    If[APDisIP[[i]]<0.5, dx=APDisIP[[i]]*0.03, dx=0];
+!    Print["rx:"//rx//"; ry:"//ry//"; dx:"//dx];
+    LINE["AX",APposi[[i]]]=rx;
+    LINE["AY",APposi[[i]]]=ry;
+    LINE["DX",APposi[[i]]]=dx;    
+  ,{i,1,Length[APposi]}]; 
+
+  APposi
+];
+
+PrintApert[APposi_]:=Module[{lscat,APName,APS,APAX,APAY,APDX,APBetaX,APBetaY,APEX,APEY,APEPX,APEPY,APTYPE},
+  fileApertName="ApertSet.txt";
+  fileApert=OpenWrite[fileApertName];    
+  Print["Write apert file"];
+
+  APName=LINE["Name",APposi];
+  APS=LINE["S",APposi];
+  APAX=LINE["AX",APposi];
+  APAY=LINE["AY",APposi];
+  APDX=LINE["DX",APposi];
+
+  APBetaX=Twiss["BX",APposi];
+  APBetaY=Twiss["BY",APposi];
+  APalfaX=Twiss["AX",APposi];
+  APalfaY=Twiss["AY",APposi];
+  APEX=Twiss["EX",APposi];
+  APEY=Twiss["EY",APposi];
+  APEPX=Twiss["EPX",APposi];
+  APEPY=Twiss["EPY",APposi];  
+
+  APTYPE=LINE["TYPENAME",APposi];  
+  lscat=LINE["S",Drop[APposi,1]]-LINE["S",Drop[APposi,-1]];
+  lscat=AppendTo[lscat,LINE["S","$$$"]-LINE["S",APposi[[-1]]]+LINE["S",APposi[[1]]]];
+
+ ! Write[fileApert,"Name	posi	type	S	AX	AY	DX	beta"]; 
+  Do[
+!    Write[fileApert,APName[[i]],"	",APposi[[i]],"	",APTYPE[[i]],"	",APS[[i]],"	",APAX[[i]],"	",APAY[[i]],"	",APDX[[i]],"	",APBetaX[[i]]];
+  Write[fileApert,APName[[i]]," ",APposi[[i]]," ",APS[[i]],"    ",lscat[[i]],"     ",APBetaX[[i]],"        ",APBetaY[[i]],"        ",APAX[[i]],"   ",APAY[[i]] ];
+  ,{i,1,Length[APposi]}];
+  Close[fileApert];
+];

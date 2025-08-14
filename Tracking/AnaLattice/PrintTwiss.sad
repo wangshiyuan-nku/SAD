@@ -1,0 +1,63 @@
+FFS;
+
+Get["../inc/libApert.n"];
+Get["../inc/libTrack.n"];
+Get["../inc/slice.n"];
+
+latticeFile1="../AccSet/BEPCII.sad";
+GetMAIN[latticeFile1];
+USE RING;
+
+(* Set parameters *)
+If[iseed<>-1,SeedRandom[iseed]];
+date0=DateString[];
+Get["../AccSet/Para_BEPC.txt"];
+
+CELL;
+CALC;
+
+(* adjust beamline *)
+CALC;
+bl=DeleteSOL[];
+CALC;
+ChangeInitalPoint[];
+CALC;
+Slice[10,0.02];
+CALC;
+Slice[70,0.1];
+CALC;
+SliceBend[8,0.02]; !only slice R4ISPB
+CALC;
+
+fileApertName="Twiss.txt";
+fileApert=OpenWrite[fileApertName];
+fileName1="twiss_BEPC.out";
+file1=OpenWrite[fileName1];
+Print["Write apert file"];
+
+Allposi=LINE["POSITION"];
+
+APS=LINE["S",Allposi];
+APBetaX=Twiss["BX",Allposi];
+APBetaY=Twiss["BY",Allposi];
+APAX=Twiss["AX",Allposi];
+APDX=Twiss["DX",Allposi];
+APDPX=Twiss["DPX",Allposi];
+APName=LINE["Name",Allposi];
+lscat=LINE["S",Drop[Allposi,1]]-LINE["S",Drop[Allposi,-1]];
+lscat=AppendTo[lscat,LINE["S","$$$"]-LINE["S",Allposi[[-1]]]+LINE["S",Allposi[[1]]]];
+
+circum=LINE["S","$$$"];
+If[LINE["S","IP"]==0,
+  DisFromIP=If[#<(circum-#),#,#-circum]&/@APS,
+  DisFromIP=APS-LINE["S","IP"];
+];
+
+$FORM = "S15.5";
+Do[
+  Write[fileApert,APS[[i]]," ",APBetaX[[i]]," ",APBetaY[[i]]," ",DisFromIP[[i]] ];
+!  Write[fileApert,APName[[i]]," ",APS[[i]]," ",APBetaX[[i]]," ",APBetaY[[i]]," ",DisFromIP[[i]] ];
+  Write[file1, APS[[i]]," ",APBetaX[[i]]," ",APBetaY[[i]]," ",APAX[[i]]," ",APDX[[i]]," ",APDPX[[i]] ];
+,{i,1,Length[Allposi]}];
+
+Exit[];

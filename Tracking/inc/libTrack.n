@@ -1,0 +1,159 @@
+DeleteSOL[]:=Module[{deposi},
+  bl=ExtractBeamLine[BeamLineName[]];
+  SOLposi=Select[LINE["POSITION"],(LINE["TYPE",#]==20)&];
+  deposi=Reverse[SOLposi]; 
+  Do[
+    bl=Join[Take[bl,{1,deposi[[ideposi]]-1}],Take[bl,{deposi[[ideposi]]+1,-1}]];
+  ,{ideposi,1,Length[deposi]}];
+
+  FFS["USE bl"];
+  FFS["CELL"];
+  FFS["CALC"];
+  bl
+];
+
+GenParticles[npar_,emitxfile_:0,emityfile_:0]:=Module[{a,u,pu,v,pv,zz,dd,p,flag},
+  emit=Emittance[Matrix->True];
+  a=NormalCoordinates/.emit;
+  !StandardForm[$FORM="8.6";PageWidth=80;Print[a]];
+  {emitx,emity,emitz}=Emittances/.emit;
+  !Print["emitx=",emitx];
+  !Print["emity=",emity];
+  !Print["emitz=",emitz];
+  
+  If[emitx>0,
+    emitx=emitxfile;
+    emity=emityfile;
+    ];
+  !Print["emitx=",emitx];
+  !Print["emity=",emity];
+  
+
+  u=Sqrt[emitx]*GaussRandom[npar];
+  pu=-Sqrt[emitx]*GaussRandom[npar];
+  v=Sqrt[emity]*GaussRandom[npar];
+  pv=-Sqrt[emity]*GaussRandom[npar];
+  zz=Sqrt[emitz]*GaussRandom[npar];
+  dd=-Sqrt[emitz]*GaussRandom[npar];
+  p=(Inverse[a].#)&/@Thread[{u,pu,v,pv,zz,dd}];
+  flag=Table[1,{npar}];
+  {1,{p[[,1]],p[[,2]],p[[,3]],p[[,4]],p[[,5]],p[[,6]],flag}}
+  ];
+
+MoveScatPoint[beam_,p_]:=Module[{},
+  v=Thread[(mat2scat[[p]].#)&/@Thread[Drop[beam[[2]],-1]]];
+  v[[1]]=v[[1]]+Twiss["DX",p];
+  v[[2]]=v[[2]]+Twiss["DPX",p];
+  v[[3]]=v[[3]]+Twiss["DY",p];
+  v[[4]]=v[[4]]+Twiss["DPY",p];
+  u=AppendTo[v,Table[1,{Length[beam[[2,7]]]}]];
+  {p,u}
+  ];
+
+SetArray[beam_,w_]:=Module[{p,pref,ps,r,d},
+  p=Sort[Select[Thread[{beam[[2,8]],w}],(#[[1]]>0)&]];
+  !Print[p];
+  pref=Union[p[[,1]]];
+  d={};
+  Do[
+    ps=Select[p,(#[[1]]==pref[[i]])&];
+    r=Plus@@ps[[,2]];
+    AppendTo[d,{pref[[i]],r}];
+    ,{i,1,Length[pref]}];
+  d
+  ];
+
+GetAccept[b1_,b2_]:=Module[{px,py,dd},
+  px=b1[[2,2]]*b2[[2,7]];
+  py=b1[[2,4]]*b2[[2,7]];
+  dd=b1[[2,6]]*b2[[2,7]];
+  {b1[[1]],{Min[px],Max[px]},{Min[py],Max[py]},{Min[dd],Max[dd]}}
+  ];
+
+GetLostParticles[b1_,b2_,w_,region_:{2478,5014}]:=Module[{d},
+  d=Select[Thread[{Table[b1[[1]],{Length[b1[[2,1]]]}],b2[[2,8]],w,b2[[2,9]],
+    b1[[2,1]],b1[[2,2]],b1[[2,3]],b1[[2,4]],b1[[2,5]],b1[[2,6]],
+    b2[[2,1]],b2[[2,2]],b2[[2,3]],b2[[2,4]],b2[[2,5]],b2[[2,6]]}],(#[[2]]>0)&];
+  d=Sort[Select[d,(region[[1]]<#[[2]]<region[[2]])&],(#1[[2]]<#2[[2]])&];
+  d
+  ];
+
+IRregion[]:=Module[{p},
+  p=Thread[{Abs[LINE["S"]-LINE["S","IP"]],LINE["POSITION"]}];
+  p=Select[p,(#[[1]]<30)&];
+  {Min[p[[,2]]],Max[p[[,2]]]}
+  ];
+
+SaveFile[]:=Module[{},
+!  Print["save"];
+  d=StringReplace[date0,{"/"->""," "->"",":"->"_"}];
+  !file=RingID//proc//"_"//d[5,8]//"_"//d[1,4]//"_"//d[9,-1]//"-"//iseed//".dat";
+  !filep=RingID//proc//"_"//d[5,8]//"_"//d[1,4]//"_"//d[9,-1]//"-"//iseed//".plost";
+  maskFileName=StringDrop[maskFile,5];  ! remove "mask/"
+  file="output/"//RingID//proc//"_phase"//phase//"_"//maskFileName//"-"//iseed//"_"//nparStr//".dat";
+  filep="output/"//RingID//proc//"_phase"//phase//"_"//maskFileName//"-"//iseed//"_"//nparStr//".plost";
+  Print["file = ",file];
+  Print["filep= ",filep];
+  
+  If[proc=="C",
+    head={latticeFile,LINE["NAME","^^^"],{npar,thmax},{date0,DateString[]},{iseed,SeedRandom[]}};
+    ];
+
+  If[proc=="B",
+    head={latticeFile,LINE["NAME","^^^"],{npar,umin},{date0,DateString[]},{iseed,SeedRandom[]}};
+    ];
+  
+  If[proc=="T",
+    head={latticeFile,LINE["NAME","^^^"],{npar,MINCOUP,PBUNCH},{date0,DateString[]},{iseed,SeedRandom[]}};
+    ];
+
+  f=OpenWrite[file];
+  Write[f,head];
+  Write[f,lossSum];
+  Write[f,Thread[{pscat,lscat}]];
+  Write[f,Thread[{pobs,lobs,nameobs}]];
+  Write[f,accept];
+  Write[f,maskSet];
+  Close[f];
+
+  f=OpenWrite[filep];
+  Write[f,lostParticles];
+  Close[f];
+
+  ];
+
+Nb[bc_,circ_]:=Module[{},
+!  circ=LINE["S","$$$"]-(Twiss["DZ","$$$"]-Twiss["DZ","^^^"]);
+  f0=SpeedOfLight/circ;
+  bc/(ElectronCharge*f0)
+  ];
+
+ng[p_:1e-7]:=Module[{T=300,kb=1.38e-23},
+  2*p/kb/T
+  ];
+
+CalLostNumber[proc_,w_,beamCurrent_,bunchNum_,lscat_,circum_,pgas_]:=Module[{dN},
+  Nbeam=Nb[beamCurrent,circum];
+  If[proc=="T",
+    Nbunch=Nbeam/bunchNum;
+    inverTau=w*SpeedOfLight*Nbunch*lscat/circum;
+    !Print["w:"//w//" ;lscat:"//lscat//" ;circum:"//circum];
+    !Print["Nbunch:"//Nbunch//" ; inverTau"//inverTau];
+  ];
+  If[proc=="C"||proc=="B",
+    Ngas=ng[pgas];
+    inverTau=w*SpeedOfLight*Ngas*lscat/circum;
+  ];
+  dN=inverTau*Nbeam;
+  dN
+];
+
+LostDisFromIP[beam2_,circum_]:=Module[{DisFromIP},
+  LostS=If[#==0,0,LINE["S",#]]&/@beam2[[2,8]];
+  If[LINE["S","IP"]==0,
+    DisFromIP=If[#<(circum-#),#,#-circum]&/@LostS,
+    DisFromIP=LostS-LINE["S","IP"];
+  ];
+  DisFromIP
+];
+

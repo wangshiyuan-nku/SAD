@@ -1,0 +1,142 @@
+FFS;
+NPARA=1;
+LOSSMAP;
+Print["LOSSSMAP =",?LOSSMAP];
+If[?LOSSMAP<=>1,FFS["ABORT"]];
+
+Module[{argp, argv = $GetCommandLine[]},
+  If[Length[argv]<=>3,
+    Print[ "Argument Error: Usage is sad Tracking.sad TrackingInit.sad"];
+    Print["current arguments:"//Length[argv]];
+    Exit[];
+  ];
+
+  Print[argv[[3]]];
+  INITFILE=argv[[3]];
+  Print[INITFILE];
+];
+
+Get[INITFILE];
+
+WorkDir=REPLACEWORKDIR;
+Get[StringJoin[WorkDir,"/inc/libTrack.n"]];
+Get[StringJoin[WorkDir,"/inc/libPhysics.n"]];
+Get[StringJoin[WorkDir,"/inc/libRecord.n"]];
+Get[StringJoin[WorkDir,"/inc/slice.n"]];
+
+Get[StringJoin[WorkDir,"/inc/libApert.n"]];
+
+latticeFile=StringJoin[WorkDir,"/AccSet/BEPCII.sad"];
+GetMAIN[latticeFile];
+
+(* Set parameters *)
+If[iseed<>-1,SeedRandom[iseed]];
+date0=DateString[];
+Get[StringJoin[WorkDir,"/AccSet/Para_BEPC.txt"]];
+
+USE RING;
+CELL;
+CALC;
+
+RFSW;
+RAD;
+NOFLUC;
+GCUT=3; !cut-off value of Gaussian distribution,3-sigma
+
+(* adjust beamline *)
+bl=DeleteSOL[];
+ChangeInitalPoint[];
+CALC;
+Slice[12,0.02];
+Slice[70,0.1];
+SliceBend[8,0.02]; !only slice R4ISPB
+CALC;
+
+(* Set Aperture *)
+ap=SetApert[];
+
+(* Observation point *)
+pobs=LINE["POSITION","AP*|*BPM*"];
+nobs=Length[pobs];
+lobs=LINE["S",Drop[pobs,1]]-LINE["S",Drop[pobs,-1]];
+lobs=PrependTo[lobs,LINE["S",pobs[[1]]]];
+
+(* Scattering point *)
+pscat=Select[LINE["POSITION"],(LINE["L",#]>0)&];
+nscat=Length[pscat];
+lscat=LINE["S",Drop[pscat,1]]-LINE["S",Drop[pscat,-1]];
+lscat=AppendTo[lscat,LINE["S","$$$"]-LINE["S",pscat[[-1]]]+LINE["S",pscat[[1]]]];
+
+FFS["RFSW RAD FLUC"];
+FFS["INTRA"];
+
+(* Emit Parameters *)
+emit=Emittance[];
+mat2scat=TransferMatrices/.Emittance[Matrix->True];
+
+
+(* mode, dX max/min,  *)
+maxturns=200;
+!nscat=10;
+proc=REPLACEMODE;
+dXmin=REPLACEDXMIN;
+dXmax=REPLACEDXMAX;
+npar=REPLACENPAR;
+RdSeed=REPLACERDSEED;
+
+(* output file *)
+filename=REPLACEOUTPUT;
+
+fileTracking=OpenWrite[filename];
+
+(* Generate *)
+!region=Module[{p},p=LINE["POSITION"];{Min[p],Max[p]}];
+beam0=GenParticles[npar, emitx, emity];
+
+(* SetApertSize *)
+apposi=SetApertSize[];
+!Allposi=LINE["POSITION"];
+!PrintApert[Allposi];
+
+(* SetRandom *)
+SeedRandom[RdSeed];
+
+$FORM = "S15.7";
+circum=LINE["S","$$$"];
+Print["stattering points:"//nscat];
+(* Loop for pscat *)
+Do[
+  beam=MoveScatPoint[beam0,pscat[[iscat]]];
+  !dX means offset value: de for touschek and brems, dtheta for coulomb scattering
+ ! Print["Scattering at:"//LINE["NAME",pscat[[iscat]]]//" "//LINE["POSITION",pscat[[iscat]]] ];
+
+  If[proc=="T",
+    {w,dX,beam1}=TouscScat[beam,npar,emitx,emity,Lbunch,sigE,dXmin,dXmax];
+!    {w,dX,beam1}=TouscScatdE[beam,dXmin,dXmax];
+  ];
+  If[proc=="C",
+    {w,dX,beam1}=CoulombScat[beam,dXmin,dXmax];
+  ];
+  If[proc=="B",
+    {w,dX,beam1}=BremsScat[beam,dXmin,dXmax];
+  ];
+
+!  Print[dX];
+!  set beam1 for test
+!  beam1={1,{{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{1,1,1}}};
+  beam2=TrackParticles[beam1,pscat[[iscat]],1,maxturns];
+ ! Print[beam2];
+
+  dN=CalLostNumber[proc,w,beamCurrent,bunchNum,lscat[[iscat]],circum,pgas];
+
+  DisIP=LostDisFromIP[beam2,circum];
+
+  PrintLostInfo[proc,dN,dX,pscat[[iscat]],beam2,DisIP,fileTracking];
+,{iscat,1,nscat}];
+
+Close[fileTracking];
+
+!Exit[];
+
+nturn=1000;
+!DynamicApertureSurvey[{Table[dx,{dx,-20,20,1}],{0,50*Sqrt[MINCOUP]},{0,0}},nturn,Axes->'XY',Output->$Output];

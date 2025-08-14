@@ -1,0 +1,169 @@
+SliceRegionBound[SliceLength_]:=Module[{dist1, dist2},
+    dist1 = LINE["S","IP"]-SliceLength;
+    dist2 = LINE["S","IP"]+SliceLength;
+  {dist1, dist2}
+];
+
+LastIndexOfBaseName[name_]:=Module[{i},
+  dotPositions = StringPosition[name, "."];
+  i = Switch[Length[dotPositions],
+    1, -1+dotPositions[[-1, 1]],
+    0, -1
+    ];
+  i
+];
+
+NewNameBase[origName_]:=Module[{NewName,lastIndex},
+  lastIndex = LastIndexOfBaseName[origName];
+  If[lastIndex==-1,
+    NewName=origName[1, lastIndex],
+    NewName=(origName[1, lastIndex]//"R"//origName[lastIndex+2])
+  ];
+  NewName
+];
+
+SliceDrift[SliceLength_,delta_]:=Module[
+  {
+    dist1,dist2,DEBUG,nslice,bl,blBeforeOrig,blAfterOrig,
+    allDNames,origDS,origDPos,newDNameBase,newDNames,driftSymbols,origDL
+  }
+  ,
+  {dist1, dist2} = SliceRegionBound[SliceLength];
+  
+  allDNames = Select[LINE["NAME"], (LINE["TYPENAME", #] == "DRIFT")&]; ! All DRIFTs
+  
+  Do[  
+    origDName=allDNames[[i]];
+    {origDS, origDL} = LINE[{"S", "L"}, origDName];
+
+    If[(origDS > dist1 && origDS < dist2 && origDL>delta),
+      newDNameBase = NewNameBase[origDName];
+      nslice = Floor[origDL/delta];
+      newDNames = (newDNameBase // #)& /@ Range[nslice+1];
+      Scan[SetElement[#, "DRIFT", {"L"->delta}]&,Drop[newDNames, -1]];
+      SetElement[newDNames[[-1]], "DRIFT", {"L"->(origDL-delta*nslice)}];
+      If[(origDL-delta*nslice)==0,
+        newDNames=Drop[newDNames, -1];
+      ];
+
+      bl=ExtractBeamLine[];
+      origDPos = LINE["POSITION", origDName];
+      blBeforeOrig = Take[bl, {1         , -1+origDPos}];
+      blAfterOrig  = Take[bl, {1+origDPos, -1}];
+      driftSymbols = ToExpression /@ newDNames;
+      Scan[(AppendTo[blBeforeOrig, #];)&,driftSymbols];
+      bl$slice = Join[blBeforeOrig, blAfterOrig];
+
+      FFS["USE bl$slice"];
+      FFS["CALC"];
+    ];
+  ,{i, 1,Length[allDNames]}];
+];
+
+SliceBend[SliceLength_,delta_]:=Module[
+  {
+    dist1,dist2,DEBUG,nslice,bl,blBeforeOrig,blAfterOrig,
+    allBNames,origBS,origBL,origBPos,newBNameBase,newBNames,
+    bendSymbols,l,e1,e2,ae1,ae2,angle,ldev,rotate,k1,f1,fringe,newBRules,newBRulesEnd
+  }
+  ,
+  {dist1, dist2} = SliceRegionBound[SliceLength];
+  
+  allBNames = Select[LINE["NAME"], (LINE["TYPENAME", #] == "BEND")&]; ! All BENDs
+  
+  Do[
+    origBName=allBNames[[i]];
+    {origBS, origBL }= LINE[{"S","L"}, origBName];
+    
+    If[(origBS > dist1 && origBS < dist2 && origBL>delta),
+      newBNameBase = NewNameBase[origBName];
+      nslice = Floor[origBL/delta];
+      {l, e1, e2, ae1, ae2, angle, ldev, rotate, k1, f1,fringe} = 
+        LINE[{"L", "E1", "E2", "AE1", "AE2", "ANGLE", "LDEV", "ROTATE", "K1","F1","FRINGE"}, origBName];
+!      Print["Name:",newBNameBase,"; origQS:",origQS];
+!      Print["l:",l, "; e1:",e1, "; ae1:",ae1, "; k1:",k1, "; F1:",f1, "; FRINGE:",fringe,"; nslice:",nslice];
+      newBRules = {
+        "L"->delta, "E1"->e1, "E2"->e2, "AE1"->ae1*delta/l, "AE2"->ae2*delta/l, 
+        "ROTATE"->rotate,"LDEV"->ldev*delta/l, "ANGLE"->angle*delta/l,
+	"K1"->k1,"F1"->f1,"FRINGE"->fringe
+      };
+      newBRulesEnd = {
+        "L"->l-nslice*delta, "E1"->e1, "E2"->e2,
+        "AE1"->ae1-nslice*ae1*delta/l, "AE2"->ae2-nslice*ae2*delta/l,
+        "ROTATE"->rotate, "LDEV"->ldev-nslice*ldev*delta/l, 
+        "ANGLE"->angle-nslice*angle*delta/l,
+	"K1"->k1,"F1"->f1,"FRINGE"->fringe
+      };
+!      Print["newBRules:",newBRules];
+!      Print["newBRulesEnd:",newBRulesEnd];
+      newBNames = (newBNameBase//#)& /@ Range[nslice];
+      Scan[SetElement[#, "BEND", newBRules]&, newBNames];
+      If[(l-nslice*delta)<>0,
+        AppendTo[newBNames,(newBNameBase//(nslice+1) )];
+        SetElement[newBNames[[nslice+1]],"BEND",newBRulesEnd ];
+      ];
+
+      bl = ExtractBeamLine[];
+      origBPos = LINE["POSITION", origBName];
+      blBeforeOrig = Take[bl, {1         , -1+origBPos}];
+      blAfterOrig  = Take[bl, {1+origBPos, -1}];
+      bendSymbols = ToExpression /@ newBNames;
+      Scan[(AppendTo[blBeforeOrig, #];)&, bendSymbols];
+      bl$slice = Join[blBeforeOrig, blAfterOrig];
+
+      FFS["USE bl$slice"];
+      FFS["CALC"];
+    ];
+  ,{i, 1,Length[allBNames]}];
+];
+
+SliceQuad[SliceLength_,delta_]:=Module[
+  {dist1,dist2,nslice,bl,blBeforeOrig,blAfterOrig,
+  allQNames,origQS,origQL,origQPos,newQNameBase,NewQNames,
+  quadSymbols,l,k1,f1,fringe,newQRules,newQRulesEnd
+  }
+  ,
+  {dist1, dist2} = SliceRegionBound[SliceLength];
+  
+  allQNames = Select[ LINE["NAME"], (LINE["TYPENAME",#] == "QUAD")& ];
+  
+  Do[
+    origQName=allQNames[[i]];
+    {origQS, origQL} = LINE[{"S","L"}, origQName];
+
+    If[(origQS > dist1 && origQS < dist2 && origQL>delta),
+      newQNameBase = NewNameBase[origQName];
+      nslice = Floor[origQL/delta];
+      {l, k1, f1, fringe} = LINE[{"L","K1","F1","FRINGE"}, origQName]; 
+      !Print["Name:",newQNameBase,"; origQS:",origQS];
+      !Print["l:",l,"; k1:",k1,"; F1:",f1,"; FRINGE:",fringe,"; nslice:",nslice];
+      newQRules = {"L"->delta, "K1"->k1*delta/l,"F1"->f1,"FRINGE"->fringe};
+      newQRulesEnd = {"L"->l-nslice*delta, "K1"->k1-k1*nslice*delta/l,"F1"->f1,"FRINGE"->fringe};
+      !Print["newQRules:",newQRules];
+      !Print["newQRulesEnd:",newQRulesEnd];
+      newQNames = (newQNameBase// #)& /@ Range[nslice];
+      Scan[ SetElement[#, "QUAD", newQRules]&, newQNames ];
+      If[(l-nslice*delta)<>0,
+        AppendTo[newQNames, (newQNameBase//(nslice+1) )];
+        SetElement[newQNames[[nslice+1]],"QUAD", newQRulesEnd ];
+      ];
+
+      bl = ExtractBeamLine[];
+      origQPos = LINE["POSITION", origQName];
+      blBeforeOrig = Take[bl, {1         , -1+origQPos}];
+      blAfterOrig  = Take[bl, {1+origQPos, -1}];
+      quadSymbols = ToExpression /@ newQNames;
+      Scan[(AppendTo[blBeforeOrig, #];)&, quadSymbols];
+      bl$slice = Join[blBeforeOrig, blAfterOrig];
+ 
+      FFS["USE bl$slice"];
+      FFS["CALC"];
+    ];
+  ,{i, 1,Length[allQNames]}];
+];
+
+Slice[SliceLength_,delta_]:=Module[{},
+  SliceDrift[SliceLength,delta];
+!  SliceBend[SliceLength,delta];
+  SliceQuad[SliceLength,delta];
+];

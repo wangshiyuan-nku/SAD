@@ -1,0 +1,28 @@
+!BEPCII parameters
+E0 = 1.89;  !beam energy (GeV)E0=1.549;
+circum = 237.5314;  !Circumference(m)
+
+beamCurrent = 0.91;  !(A)
+bunchCurrent = 9.8e-3;  !(A)
+bunchNum = 93;  !bunch number
+Lbunchnatural = 13.6e-3;  !length of natural bunch (m)
+Lbunch = 1.5e-2; !real length of bunch(m)
+
+RFf = 499.8e6;  !RF frequency(Hz)
+harmonicNumber = 396; !Harmonic number
+
+emitx = 144e-9;  !emittance in x (m*rad)
+emity = 2.2e-9;  !emittance in y (m*rad)
+!emitx=122.834e-9
+!emity=1.86e-9
+
+betaIPx = 1.0;  !betax at IP(m)
+betaIPy = 0.015;  !betay at IP(m)
+Crossangle = 11e-3;  !(rad)
+tunex = 6.54;
+tuney = 5.59;
+tunes = 0.034;
+alfap = 0.0237; !Momentum comoaction
+sigE = 5.16e-4; ! energy spread
+
+pgas = 1e-7; ! pressure of vacuum chamber

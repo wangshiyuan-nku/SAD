@@ -1,0 +1,84 @@
+! functions to record information
+
+PrintTousGeneInfo[beam1_,w_,de_,file1_,file2_,iscat_]:=Module[{},
+  wSum=0;
+  Do[
+    If[ de[[i]]<-0.0068||de[[i]]>0.0068,
+      wSum=wSum+w[[i]] 
+    ];
+  ,{i,1,Length[w]}];
+
+  sscat=LINE["S",beam1[[1]] ];
+  Write[file1,wSum," ",sscat," ",lscat[[iscat]] ];
+
+  Do[
+    If[ de[[i]]<-0.0068||de[[i]]>0.0068,
+      Write[file2,w[[i]]," ",de[[i]]];
+    ];
+  ,{i,1,Length[w]}];
+
+];
+
+PrintCoulGeneInfo[beam1_,w_,theta_,file1_,file2_,iscat_]:=Module[{Posi,bY,HY,betaYmax,thetaYmin},
+  wSum=0;
+  HY=0.014;
+  betaYmax=1688;
+  Posi=beam1[[1]];
+  bY=Twiss["BY",Posi];
+  thetaYmin=HY/Sqrt[bY*betaYmax];
+  !Print["thetaYmin:",thetaYmin];
+  
+  Do[
+    If[ theta[[i]]>thetaYmin,
+      wSum=wSum+w[[i]];
+    ];
+  ,{i,1,Length[w]}];
+  sscat=LINE["S",beam1[[1]] ];
+  Write[file1,wSum," ",sscat," ",lscat[[iscat]] ];
+ 
+  Do[
+    If[ theta[[i]]>thetaYmin,
+    Write[file2,w[[i]]," ",theta[[i]]];
+    ];
+  ,{i,1,Length[w]}]; 
+
+];
+
+PrintBremGeneInfo[beam1_,w_,de_,file1_,file2_,iscat_]:=Module[{},
+  wSum=0;
+  Do[
+    If[ de[[i]]<-0.0068,
+      wSum=wSum+w[[i]];
+    ];
+  ,{i,1,Length[w]}];
+  sscat=LINE["S",beam1[[1]] ];
+  Write[file1,wSum," ",sscat," ",lscat[[iscat]] ];
+
+  Do[
+    If[ de[[i]]>0.0068,
+      Write[file2,w[[i]]," ",de[[i]]];
+    ];
+  ,{i,1,Length[w]}];
+
+];
+
+PrintLostInfo[proc_,dN_,dX_,pscat_,beam2_,DisIP_,file1_]:=Module[{},
+  Do[
+    If[ dX[[i]]==0||beam2[[2,7,i]]==1,Continue[] ];
+    If[beam2[[2,2,i]]=="NaN"||beam2[[2,2,i]]=="INF"||beam2[[2,4,i]]=="NaN"||beam2[[2,4,i]]=="INF",Continue[] ];   
+
+    Write[file1, dN[[i]],"	",dX[[i]],"	",LINE["S",pscat],"	",beam2[[2,1,i]],"	",beam2[[2,2,i]],"	",beam2[[2,3,i]],"	",beam2[[2,4,i]],"	",DisIP[[i]],"	",beam2[[2,6,i]],"      ",beam2[[2,9,i]] ]; 
+
+  ,{i,1,Length[dN]}]; 
+];
+
+PrintTrack[beam1_,iparticle_,fileTrack_,pscat_]:=Module[{},
+  !Print["IP:",LINE["S","IP"] ];
+  Write[fileTrack,Length[pscat]];
+  beam3=beam1;
+  Do[
+    beam3=TrackParticles[beam3,pscat[[iscat]] ];
+  !  Print["flag:",beam3[[2,7,iparticle]],"; Lost pos:",beam3[[2,8,iparticle]] ];
+    Write[fileTrack,beam3[[2,1,iparticle]]," ",beam3[[2,3,iparticle]]," ",LINE["S",pscat[[iscat]] ]," ",beam3[[2,7,iparticle]] ];  !only position
+  ,{iscat,1,Length[pscat]}];
+];
